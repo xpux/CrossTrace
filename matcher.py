@@ -9,51 +9,7 @@ BOTH_LISTS_BONUS = 8
 MUTUAL_FOLLOW_BONUS = 12
 ALIAS_SCORE = 100
 FEEDBACK_PENALTY = 15
-NICKNAME_BONUS = 10
 
-NICKNAMES = {
-    "alexander": ["alex", "xander", "ale"],
-    "alexandra": ["alex", "xandra", "ale"],
-    "christopher": ["chris", "topher"],
-    "elizabeth": ["liz", "beth", "ellie", "libby"],
-    "katherine": ["kate", "kathy", "kat"],
-    "william": ["will", "bill", "billy", "willy"],
-    "robert": ["rob", "bob", "bobby"],
-    "michael": ["mike", "mick", "mikey"],
-    "james": ["jim", "jimmy", "jamie"],
-    "jonathan": ["jon", "jonny", "nathan"],
-    "nicholas": ["nick", "nicky"],
-    "benjamin": ["ben", "benny"],
-    "matthew": ["matt", "matty"],
-    "thomas": ["tom", "tommy"],
-    "daniel": ["dan", "danny"],
-    "joseph": ["joe", "joey"],
-    "anthony": ["tony", "ant"],
-    "andrew": ["andy", "drew"],
-    "richard": ["rich", "rick", "ricky", "dick"],
-    "samantha": ["sam", "sammie"],
-    "jennifer": ["jen", "jenny"],
-    "jessica": ["jess", "jessie"],
-    "stephanie": ["steph", "stevie"],
-    "victoria": ["vicky", "tori", "vic"],
-    "vanessa": ["nessa", "van"],
-    "natalie": ["nat", "natty"],
-    "margaret": ["maggie", "meg", "peggy"],
-    "patricia": ["pat", "trish", "patty"],
-    "mohammed": ["mo", "med", "hamad"],
-    "muhammad": ["mo", "med"],
-    "abdulrahman": ["abdo", "rahman", "abdul"],
-    "ibrahim": ["ibo", "brahim"],
-}
-
-NICKNAME_LOOKUP = {}
-for full, shorts in NICKNAMES.items():
-    NICKNAME_LOOKUP[full] = shorts
-    for short in shorts:
-        if short not in NICKNAME_LOOKUP:
-            NICKNAME_LOOKUP[short] = [full] + [s for s in shorts if s != short]
-        else:
-            NICKNAME_LOOKUP[short].extend([full] + [s for s in shorts if s != short])
 
 
 def detect_script(text):
@@ -86,16 +42,6 @@ def detect_script(text):
     return max(scripts, key=scripts.get)
 
 
-def nickname_match(n1, n2):
-    if not n1 or not n2:
-        return False
-    n1 = n1.lower().strip()
-    n2 = n2.lower().strip()
-    if n1 == n2:
-        return False
-    variants_1 = set([n1] + NICKNAME_LOOKUP.get(n1, []))
-    variants_2 = set([n2] + NICKNAME_LOOKUP.get(n2, []))
-    return bool(variants_1 & variants_2)
 
 
 def load_feedback(path="feedback.json"):
@@ -199,12 +145,6 @@ def score_pair(entry_a, entry_b, feedback, alias_map, known_hints=None):
         base = min(100, base + PATTERN_BONUS)
         reasons.append("common username variation pattern")
 
-    if d1 and d2:
-        d1_first = d1.lower().split()[0] if " " in d1 else d1.lower()
-        d2_first = d2.lower().split()[0] if " " in d2 else d2.lower()
-        if nickname_match(d1_first, d2_first):
-            base = min(100, base + NICKNAME_BONUS)
-            reasons.append(f"nickname match ({d1_first} / {d2_first})")
 
     # fix issue 4: apply both-lists bonus symmetrically to both entries
     a_both = entry_a.get("in_followers") and entry_a.get("in_following")

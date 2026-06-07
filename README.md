@@ -5,9 +5,26 @@ CrossTrace takes raw exported follower/following lists from any social media pla
 
 ---
 
+## Quick start
+
+```bash
+git clone https://github.com/xpux/CrossTrace.git
+cd CrossTrace
+pip install -r requirements.txt
+python setup.py
+```
+
+`setup.py` creates all the files and folders the tool needs on first run. After that, drop your exported lists into `data/users/me/` and run:
+
+```bash
+python crosstrace.py
+```
+
+---
+
 ## Features
 
-Cross platform matching: find the same person across TikTok, Instagram, Twitter, and more
+Cross-platform matching: find the same person across TikTok, Instagram, Twitter, and more
 
 Fuzzy matching: catches variations like `johndoe`, `john_doe`, `johndoe_` and scores them by confidence
 
@@ -196,7 +213,7 @@ When a hint from these files matches an entry, it shows up in the `why:` line du
 | Manual review | 50–74% | Needs careful review ⚠️ |
 | Weak match | Below 50% | Low priority, listed separately |
 
-Scores are calculated from username similarity (fuzzy), display name similarity (script-aware), nickname matching, mutual follow detection, shared mutual connections between platforms, common username patterns (`_` added, numbers appended, `.` swapped), whether the person appears in both followers and following vs just one, alias dictionary hits, known info hints, and how many seed users follow them in multi-user mode.
+Scores are calculated from username similarity (fuzzy), display name similarity (script-aware), mutual follow detection, shared mutual connections between platforms, common username patterns (`_` added, numbers appended, `.` swapped), whether the person appears in both followers and following vs just one, alias dictionary hits, known info hints, and how many seed users follow them in multi-user mode.
 
 ---
 
