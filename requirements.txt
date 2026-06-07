@@ -1,4 +1,2 @@
 rapidfuzz
 pandas
-networkx
-matplotlib

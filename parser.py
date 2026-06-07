@@ -36,6 +36,10 @@ def is_username(line):
     line = line.strip()
     if not line or line.isdigit() or " " in line:
         return False
+    if not re.search(r'[a-zA-Z0-9]', line):
+        return False
+    if len(line) < 2:
+        return False
     return bool(re.match(r'^[\w.\-]+$', line))
 
 
@@ -118,8 +122,9 @@ def load_all_users(users_dir="data/users", ignore_set=None):
             filepath = os.path.join(user_path, filename)
             platform, list_type, number = get_platform_from_filename(filename)
 
-            if number not in all_users[user_folder]:
-                all_users[user_folder][number] = {
+            bucket_key = (platform, number)
+            if bucket_key not in all_users[user_folder]:
+                all_users[user_folder][bucket_key] = {
                     "platform": platform,
                     "followers": [],
                     "following": []
@@ -128,9 +133,9 @@ def load_all_users(users_dir="data/users", ignore_set=None):
             entries = parse_file(filepath, ignore_set)
 
             if list_type == "followers":
-                all_users[user_folder][number]["followers"] = entries
+                all_users[user_folder][bucket_key]["followers"] = entries
             elif list_type == "following":
-                all_users[user_folder][number]["following"] = entries
+                all_users[user_folder][bucket_key]["following"] = entries
 
     return all_users
 

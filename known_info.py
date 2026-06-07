@@ -117,7 +117,7 @@ def load_known_info(config, target=None):
     return all_hints
 
 
-def score_against_hints(entry, hints, boost=12):
+def score_against_hints(entry, hints, boost=12, exact_only=False):
     if not hints:
         return 0, []
 
@@ -132,7 +132,7 @@ def score_against_hints(entry, hints, boost=12):
             total_boost += boost
             reasons.append(f"username matches known hint '{hint_u}'")
             break
-        elif hint_u in u or u in hint_u:
+        elif not exact_only and len(hint_u) >= 4 and (hint_u in u or u in hint_u):
             total_boost += boost // 2
             reasons.append(f"username partially matches known hint '{hint_u}'")
             break
@@ -143,7 +143,7 @@ def score_against_hints(entry, hints, boost=12):
             total_boost += boost
             reasons.append(f"display name matches known hint '{hint_d}'")
             break
-        elif hint_lower in d or d in hint_lower:
+        elif not exact_only and len(hint_lower) >= 4 and (hint_lower in d or d in hint_lower):
             total_boost += boost // 2
             reasons.append(f"display name partially matches known hint '{hint_d}'")
             break

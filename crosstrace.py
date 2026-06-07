@@ -411,13 +411,19 @@ def handle_alias_suggestions(results, aliases_path="aliases.txt"):
     if not new_suggestions:
         return
 
-    print(f"\n  {len(new_suggestions)} alias suggestion(s) based on confirmed matches:\n")
+    print(f"\n  {len(new_suggestions)} alias suggestion(s) based on confirmed matches.")
+    print(c("  warning: aliases are permanent and auto-confirm future matches at 100%. only approve if you are certain.", "orange"))
+    print()
     approved = []
     for u1, u2 in new_suggestions:
         print(f"  {u1} = {u2}")
         ans = input("  add to aliases.txt? (y/n): ").strip().lower()
         if ans == "y":
-            approved.append(f"{u1} = {u2}")
+            confirm = input(f"  confirm: permanently alias {u1} = {u2}? (y/n): ").strip().lower()
+            if confirm == "y":
+                approved.append(f"{u1} = {u2}")
+            else:
+                print("  skipped.")
         print()
 
     if approved:

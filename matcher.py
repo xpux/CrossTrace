@@ -5,11 +5,9 @@ from rapidfuzz import fuzz
 
 
 PATTERN_BONUS = 15
-MUTUAL_BONUS = 10
 BOTH_LISTS_BONUS = 8
 MUTUAL_FOLLOW_BONUS = 12
 ALIAS_SCORE = 100
-FEEDBACK_BOOST = 10
 FEEDBACK_PENALTY = 15
 NICKNAME_BONUS = 10
 
@@ -151,11 +149,6 @@ def has_pattern_variation(u1, u2):
     return u2 in variations
 
 
-def mutual_follow_bonus(entry_a, entry_b):
-    return entry_a.get("in_followers") and entry_a.get("in_following") and \
-           entry_b.get("in_followers") and entry_b.get("in_following")
-
-
 def score_pair(entry_a, entry_b, feedback, alias_map, known_hints=None):
     u1 = entry_a.get("username")
     u2 = entry_b.get("username")
@@ -213,36 +206,33 @@ def score_pair(entry_a, entry_b, feedback, alias_map, known_hints=None):
             base = min(100, base + NICKNAME_BONUS)
             reasons.append(f"nickname match ({d1_first} / {d2_first})")
 
-    if entry_a.get("in_followers") and entry_a.get("in_following") and \
-       entry_b.get("in_followers") and entry_b.get("in_following"):
+    # fix issue 4: apply both-lists bonus symmetrically to both entries
+    a_both = entry_a.get("in_followers") and entry_a.get("in_following")
+    b_both = entry_b.get("in_followers") and entry_b.get("in_following")
+    if a_both and b_both:
         base = min(100, base + MUTUAL_FOLLOW_BONUS)
         reasons.append("mutual follow on both platforms")
+    elif a_both or b_both:
+        base = min(100, base + BOTH_LISTS_BONUS)
+        reasons.append("appears in both followers and following")
 
+    # fix issue 3: removed fuzzy feedback generalization, only exact pair matches apply
     if u1 and u2 and feedback:
-        confirmed_patterns = [k for k, v in feedback.items() if v == "confirmed"]
-        for pattern in confirmed_patterns:
-            parts = pattern.split(":")
-            if len(parts) == 2:
-                pu1, pu2 = parts
-                if fuzz.ratio(u1, pu1) > 85 and fuzz.ratio(u2, pu2) > 85:
-                    base = min(100, base + FEEDBACK_BOOST)
-                    reasons.append("similar to a previously confirmed match")
-                    break
-
         rejected_patterns = [k for k, v in feedback.items() if v == "rejected"]
         for pattern in rejected_patterns:
             parts = pattern.split(":")
             if len(parts) == 2:
                 pu1, pu2 = parts
-                if fuzz.ratio(u1, pu1) > 85 and fuzz.ratio(u2, pu2) > 85:
+                if (u1 == pu1 and u2 == pu2) or (u1 == pu2 and u2 == pu1):
                     base = max(0, base - FEEDBACK_PENALTY)
                     reasons.append("similar to a previously rejected match")
                     break
 
+    # fix issue 2: known info only boosts with exact username match not substring
     if known_hints:
         from known_info import score_against_hints
-        boost_a, reasons_a = score_against_hints(entry_a, known_hints)
-        boost_b, reasons_b = score_against_hints(entry_b, known_hints)
+        boost_a, reasons_a = score_against_hints(entry_a, known_hints, exact_only=True)
+        boost_b, reasons_b = score_against_hints(entry_b, known_hints, exact_only=True)
         if boost_a or boost_b:
             base = min(100, base + max(boost_a, boost_b))
             reasons.extend(reasons_a or reasons_b)
@@ -262,41 +252,53 @@ def get_tier(score, quick_threshold=None):
 
 
 def flatten_entries(user_data):
+    # fix issue 6: preserve all entries per key as a list instead of overwriting
     all_entries = {}
     for platform_num, data in user_data.items():
         platform = data["platform"]
         for entry in data["followers"]:
             key = entry.get("username") or entry.get("display_name", "").lower()
-            if key:
-                all_entries[key] = {
+            if not key:
+                continue
+            canonical = (key, platform)
+            if canonical not in all_entries:
+                all_entries[canonical] = {
                     **entry,
                     "platform": platform,
                     "platform_num": platform_num,
                     "in_followers": True,
-                    "in_following": all_entries.get(key, {}).get("in_following", False)
+                    "in_following": False
                 }
+            else:
+                all_entries[canonical]["in_followers"] = True
+
         for entry in data["following"]:
             key = entry.get("username") or entry.get("display_name", "").lower()
-            if key:
-                if key in all_entries:
-                    all_entries[key]["in_following"] = True
-                else:
-                    all_entries[key] = {
-                        **entry,
-                        "platform": platform,
-                        "platform_num": platform_num,
-                        "in_followers": False,
-                        "in_following": True
-                    }
+            if not key:
+                continue
+            canonical = (key, platform)
+            if canonical not in all_entries:
+                all_entries[canonical] = {
+                    **entry,
+                    "platform": platform,
+                    "platform_num": platform_num,
+                    "in_followers": False,
+                    "in_following": True
+                }
+            else:
+                all_entries[canonical]["in_following"] = True
+
     return all_entries
 
 
 def match_across_platforms(all_users, alias_map, feedback, min_threshold=30, known_hints=None, quick_threshold=None):
     results = []
-    seen_pairs = set()
+    # fix issue 5: scope deduplication per user so corroborating evidence from different users is preserved
+    pair_scores = {}
 
     for user_name, user_data in all_users.items():
         platform_nums = list(user_data.keys())
+        seen_pairs_this_user = set()
 
         for i in range(len(platform_nums)):
             for j in range(i + 1, len(platform_nums)):
@@ -308,9 +310,13 @@ def match_across_platforms(all_users, alias_map, feedback, min_threshold=30, kno
 
                 for key_a, entry_a in entries_a.items():
                     for key_b, entry_b in entries_b.items():
-                        pair_key = tuple(sorted([key_a, key_b]))
-                        if pair_key in seen_pairs:
+                        username_a = entry_a.get("username") or key_a[0]
+                        username_b = entry_b.get("username") or key_b[0]
+                        pair_key = tuple(sorted([username_a, username_b]))
+
+                        if pair_key in seen_pairs_this_user:
                             continue
+                        seen_pairs_this_user.add(pair_key)
 
                         score, reasons = score_pair(entry_a, entry_b, feedback, alias_map, known_hints=known_hints)
 
@@ -318,21 +324,40 @@ def match_across_platforms(all_users, alias_map, feedback, min_threshold=30, kno
                         if score < effective_min:
                             continue
 
-                        seen_pairs.add(pair_key)
+                        if pair_key not in pair_scores:
+                            pair_scores[pair_key] = {
+                                "entry_a": entry_a,
+                                "entry_b": entry_b,
+                                "score": score,
+                                "reasons": reasons,
+                                "corroborated_by": [user_name]
+                            }
+                        else:
+                            existing = pair_scores[pair_key]
+                            if user_name not in existing["corroborated_by"]:
+                                existing["corroborated_by"].append(user_name)
+                            if score > existing["score"]:
+                                existing["score"] = score
+                                existing["reasons"] = reasons
 
-                        both_lists = entry_a.get("in_followers") and entry_a.get("in_following")
-                        if both_lists:
-                            score = min(100, score + BOTH_LISTS_BONUS)
-                            reasons.append("appears in both followers and following")
+    for pair_key, data in pair_scores.items():
+        score = data["score"]
+        reasons = data["reasons"]
+        corroborated_by = data["corroborated_by"]
 
-                        results.append({
-                            "user": user_name,
-                            "entry_a": entry_a,
-                            "entry_b": entry_b,
-                            "score": score,
-                            "tier": get_tier(score, quick_threshold=quick_threshold),
-                            "reasons": reasons
-                        })
+        if len(corroborated_by) > 1:
+            score = min(100, score + 5 * (len(corroborated_by) - 1))
+            reasons = reasons + [f"corroborated by {len(corroborated_by)} users"]
+
+        results.append({
+            "user": corroborated_by[0],
+            "entry_a": data["entry_a"],
+            "entry_b": data["entry_b"],
+            "score": score,
+            "tier": get_tier(score, quick_threshold=quick_threshold),
+            "reasons": reasons,
+            "corroborated_by": corroborated_by
+        })
 
     results.sort(key=lambda x: x["score"], reverse=True)
     return results
@@ -455,7 +480,7 @@ def suggest_aliases(results):
     suggestions = []
     seen = set()
     for r in results:
-        if r.get("tier") not in ("AUTO-CONFIRMED",):
+        if r.get("tier") != "AUTO-CONFIRMED":
             continue
         ea = r.get("entry_a", {})
         eb = r.get("entry_b", {})

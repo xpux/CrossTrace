@@ -102,6 +102,7 @@ def run_review(results, feedback, feedback_path="feedback.json", famous_path="fa
             match["tier"] = "AUTO-CONFIRMED"
             match["score"] = 100
             match["reviewed"] = True
+            match["confirmed_by_user"] = True
 
         elif choice == "2":
             if u1 and u2:
