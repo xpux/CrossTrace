@@ -1,0 +1,24 @@
+# personal data
+data/users/
+data/known/
+
+# output sessions
+output/
+
+# memory files
+feedback.json
+famous.json
+history.json
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+
+# os
+.DS_Store
+Thumbs.db
