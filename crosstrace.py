@@ -12,6 +12,9 @@ from reviewer import run_review, run_discovery_review, run_unmatched_review, loa
 from history import record_session, compare_sessions, get_score_history
 
 
+VERSION = "1.0.0"
+
+
 COLORS = {
     "green":  "\033[92m",
     "yellow": "\033[93m",
@@ -49,7 +52,8 @@ def load_config(path="config.json"):
         "review_mode": True,
         "top_results": 5,
         "quick_mode": False,
-        "quick_threshold": 70
+        "quick_threshold": 70,
+        "min_username_length": 2
     }
     if not os.path.exists(path):
         return defaults
@@ -545,6 +549,76 @@ def cmd_score_history(username):
     print()
 
 
+
+def cmd_reset():
+    files = ["feedback.json", "famous.json", "history.json"]
+    print()
+    for f in files:
+        if os.path.exists(f):
+            with open(f, "w", encoding="utf-8") as fh:
+                fh.write("{}" if f != "history.json" else "[]")
+            print(f"  reset {f}")
+        else:
+            print(f"  {f} not found, skipping")
+    print(c("  all memory files reset.\n", "green"))
+
+
+def cmd_dry_run(config, all_users, aliases, feedback, target, known_hints, mode):
+    print(c("\n  DRY RUN — no decisions will be saved\n", "cyan"))
+
+    if mode == "target":
+        quick_threshold = config["quick_threshold"] if config.get("quick_mode") else None
+        results = match_across_platforms(all_users, aliases, feedback, config["min_match_threshold"], known_hints=known_hints, quick_threshold=quick_threshold)
+    else:
+        results = discovery_mode(all_users, aliases, feedback, config["min_match_threshold"])
+
+    if not results:
+        print("  no matches found above threshold")
+        return
+
+    review_queue = [r for r in results if r.get("tier") in ("MANUAL REVIEW", "QUICK REVIEW")]
+    auto = [r for r in results if r.get("tier") == "AUTO-CONFIRMED"]
+    weak = [r for r in results if r.get("tier") == "WEAK"]
+
+    print(f"  total matches:      {len(results)}")
+    print(f"  {c('auto-confirmed', 'green')}:    {len(auto)}")
+    print(f"  {c('review queue', 'yellow')}:     {len(review_queue)}")
+    print(f"  {c('weak', 'grey')}:            {len(weak)}")
+    print()
+    print(c("  preview of review queue:\n", "cyan"))
+
+    for i, r in enumerate(review_queue[:10]):
+        if mode == "discovery":
+            entry = r.get("entry", {})
+            u = entry.get("username", "???")
+            d = entry.get("display_name", "")
+            seen_by = ", ".join(r.get("seen_by", []))
+            score = r.get("score", 0)
+            tier = r.get("tier", "")
+            line = f"  [{i+1}] {c(u, tier_color(tier))}"
+            if d:
+                line += f" / {d}"
+            line += f"  |  followed by: {seen_by}  |  {score}%  |  {c(tier, tier_color(tier))}"
+            print(line)
+        else:
+            ea = r.get("entry_a", {})
+            eb = r.get("entry_b", {})
+            ua = ea.get("username", "???")
+            ub = eb.get("username", "???")
+            pa = ea.get("platform", "?")
+            pb = eb.get("platform", "?")
+            score = r.get("score", 0)
+            tier = r.get("tier", "")
+            reasons = r.get("reasons", [])
+            print(f"  [{i+1}] {c(ua, tier_color(tier))} ({pa})  →  {c(ub, tier_color(tier))} ({pb})  |  {score}%  |  {c(tier, tier_color(tier))}")
+            if reasons:
+                print(f"    {c('why:', 'grey')} {', '.join(reasons)}")
+
+    if len(review_queue) > 10:
+        print(f"  ... and {len(review_queue) - 10} more")
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(prog="crosstrace", add_help=True)
     parser.add_argument("--no-review", action="store_true", help="skip review queue entirely")
@@ -553,6 +627,10 @@ def main():
     parser.add_argument("--summary", metavar="SESSION", help="reprint summary for a previous session")
     parser.add_argument("--history", metavar="USERNAME", help="show score history for a username across sessions")
     parser.add_argument("--export-aliases", action="store_true", help="export all confirmed matches to aliases.txt")
+    parser.add_argument("--dry-run", action="store_true", help="preview review queue without saving anything")
+    parser.add_argument("--reset", action="store_true", help="wipe feedback.json, famous.json and history.json")
+    parser.add_argument("--stats-only", action="store_true", help="print stats from last session without rerunning")
+    parser.add_argument("--version", action="store_true", help="print version number")
     args = parser.parse_args()
 
     if args.search:
@@ -571,10 +649,32 @@ def main():
         cmd_score_history(args.history)
         return
 
+    if args.version:
+        print(f"\n  CrossTrace v{VERSION}\n")
+        return
+
+    if args.reset:
+        cmd_reset()
+        return
+
+    if args.stats_only:
+        from history import load_history
+        history = load_history()
+        if not history:
+            print("\n  no session history found\n")
+            return
+        last = history[-1]
+        print(f"\n  last session: {last['session']}")
+        print(f"  mode:         {last['mode']}")
+        print(f"  confirmed:    {last['confirmed_count']}")
+        print(f"  timestamp:    {last['timestamp'][:19]}\n")
+        return
+
     config = load_config()
     ignore = load_ignorelist()
     aliases = load_aliases()
     feedback = load_feedback()
+    min_ulen = config.get('min_username_length', 2)
 
     session_name = get_session_name()
     output_dir = os.path.join("output", session_name)
@@ -640,6 +740,10 @@ def main():
 
     if not results:
         print("  no matches found above threshold")
+        return
+
+    if args.dry_run:
+        cmd_dry_run(config, all_users, aliases, feedback, target, known_hints, mode)
         return
 
     famous = load_famous()

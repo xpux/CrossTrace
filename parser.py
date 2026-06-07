@@ -32,13 +32,13 @@ def load_aliases(path="aliases.txt"):
     return alias_map
 
 
-def is_username(line):
+def is_username(line, min_length=2):
     line = line.strip()
     if not line or line.isdigit() or " " in line:
         return False
     if not re.search(r'[a-zA-Z0-9]', line):
         return False
-    if len(line) < 2:
+    if len(line) < min_length:
         return False
     return bool(re.match(r'^[\w.\-]+$', line))
 
