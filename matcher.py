@@ -1,8 +1,8 @@
 import json
 import os
 import unicodedata
-from rapidfuzz import fuzz
 
+from rapidfuzz import fuzz
 
 PATTERN_BONUS = 15
 BOTH_LISTS_BONUS = 8
@@ -47,7 +47,7 @@ def detect_script(text):
 def load_feedback(path="feedback.json"):
     if not os.path.exists(path):
         return {}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         try:
             return json.load(f)
         except json.JSONDecodeError:
@@ -437,7 +437,7 @@ def suggest_aliases(results):
 def get_persistent_connections(path="history.json", min_appearances=2):
     if not os.path.exists(path):
         return []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         try:
             history = json.load(f)
         except json.JSONDecodeError:

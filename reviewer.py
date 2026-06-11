@@ -1,7 +1,7 @@
-import os
 import json
-from matcher import get_tier, save_feedback
+import os
 
+from matcher import save_feedback
 
 WARNING = """
 ╔══════════════════════════════════════════════════════════════╗
@@ -14,7 +14,7 @@ WARNING = """
 def load_famous(path="famous.json"):
     if not os.path.exists(path):
         return set()
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         try:
             data = json.load(f)
             return set(data)
@@ -128,7 +128,7 @@ def run_review(results, feedback, feedback_path="feedback.json", famous_path="fa
 
     save_feedback(feedback, feedback_path)
     save_famous(famous, famous_path)
-    print(f"  feedback saved.\n")
+    print("  feedback saved.\n")
 
     return filtered
 
@@ -195,7 +195,7 @@ def run_discovery_review(ranked, feedback, feedback_path="feedback.json", famous
 
     save_feedback(feedback, feedback_path)
     save_famous(famous, famous_path)
-    print(f"  feedback saved.\n")
+    print("  feedback saved.\n")
 
     return filtered
 
