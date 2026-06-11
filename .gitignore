@@ -1,16 +1,19 @@
-# personal data
+# ── Personal data — never commit anyone's lists or identity links ──────
 data/users/
 data/known/
 target.txt
-# output sessions
+aliases.txt          # confirmed identity links live here; ship aliases.example.txt instead
+config.local.json    # local config overrides; config.json stays as the tracked template
+
+# ── Output sessions ───────────────────────────────────────────────────
 output/
 
-# memory files
+# ── Learned memory ────────────────────────────────────────────────────
 feedback.json
 famous.json
 history.json
 
-# python
+# ── Python ────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
@@ -18,7 +21,21 @@ __pycache__/
 .env
 venv/
 .venv/
+*.egg-info/
+.eggs/
+build/
+dist/
 
-# os
+# ── Tooling ───────────────────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── OS / editors ──────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+*.swp

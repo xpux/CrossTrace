@@ -1,7 +1,6 @@
-import os
 import json
+import os
 from datetime import datetime
-
 
 HISTORY_FILE = "history.json"
 
@@ -9,7 +8,7 @@ HISTORY_FILE = "history.json"
 def load_history(path=HISTORY_FILE):
     if not os.path.exists(path):
         return []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         try:
             return json.load(f)
         except json.JSONDecodeError:

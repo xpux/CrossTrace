@@ -1,7 +1,6 @@
 import os
 import re
 
-
 USERNAME_PATTERN = re.compile(r'\b[\w][\w.\-]{2,29}\b')
 PLATFORM_KEYWORDS = {"tiktok", "instagram", "twitter", "snapchat", "youtube", "facebook", "threads", "x"}
 SKIP_WORDS = {
@@ -17,7 +16,7 @@ SKIP_WORDS = {
 
 def read_file(path):
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(path, encoding="utf-8", errors="ignore") as f:
             return f.read()
     except Exception:
         return ""
@@ -48,7 +47,13 @@ def extract_hints(text):
         for match in USERNAME_PATTERN.finditer(line):
             candidate = match.group()
             if candidate.lower() not in SKIP_WORDS and len(candidate) >= 3:
-                if any(c in candidate for c in ("_", ".", "0123456789")) or candidate.islower():
+                looks_like_handle = (
+                    "_" in candidate
+                    or "." in candidate
+                    or any(ch.isdigit() for ch in candidate)
+                    or candidate.islower()
+                )
+                if looks_like_handle:
                     hints["usernames"].add(candidate.lower())
 
         hints["raw_lines"].append(line)

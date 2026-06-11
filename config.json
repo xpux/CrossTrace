@@ -6,6 +6,9 @@
   "quick_mode": false,
   "quick_threshold": 70,
   "min_username_length": 2,
+  "graph": {
+    "formats": ["json", "graphml", "html"]
+  },
   "known_info": {
     "enabled": true,
     "mode": "global",

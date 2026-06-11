@@ -1,18 +1,26 @@
-import os
-import sys
-import json
-import csv
 import argparse
+import csv
+import json
+import os
 from datetime import datetime
+from parser import load_aliases, load_all_users, load_ignorelist, load_target
 
-from parser import load_ignorelist, load_aliases, load_all_users, load_target
-from matcher import match_across_platforms, find_target, discovery_mode, load_feedback, find_unmatched, suggest_aliases, get_persistent_connections
+from graph import build_graph, export_graphml, export_html
+from graph import export_json as graph_json
+from history import compare_sessions, get_score_history, record_session
 from known_info import load_known_info
-from reviewer import run_review, run_discovery_review, run_unmatched_review, load_famous
-from history import record_session, compare_sessions, get_score_history
+from matcher import (
+    discovery_mode,
+    find_target,
+    find_unmatched,
+    get_persistent_connections,
+    load_feedback,
+    match_across_platforms,
+    suggest_aliases,
+)
+from reviewer import load_famous, run_discovery_review, run_review, run_unmatched_review
 
-
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 COLORS = {
@@ -53,11 +61,12 @@ def load_config(path="config.json"):
         "top_results": 5,
         "quick_mode": False,
         "quick_threshold": 70,
-        "min_username_length": 2
+        "min_username_length": 2,
+        "graph": {"formats": ["json", "graphml", "html"]}
     }
     if not os.path.exists(path):
         return defaults
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         try:
             data = json.load(f)
             return {**defaults, **data}
@@ -65,16 +74,23 @@ def load_config(path="config.json"):
             return defaults
 
 
+def _safe_input(prompt):
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        return ""
+
+
 def get_session_name():
     default = datetime.now().strftime("session_%Y%m%d_%H%M%S")
     print(f"\n  name this session (leave blank for '{default}'):")
-    name = input("  > ").strip()
+    name = _safe_input("  > ")
     return name if name else default
 
 
 def get_target_interactive():
     print("\n  enter target username (leave blank for discovery mode):")
-    val = input("  > ").strip().lower()
+    val = _safe_input("  > ").lower()
     return val if val else None
 
 
@@ -145,7 +161,7 @@ def print_summary(results, mode="target", top_n=5):
         for r in results:
             tiers.setdefault(r.get("tier", "WEAK"), []).append(r)
 
-        print(f"\n  Mode: Discovery\n")
+        print("\n  Mode: Discovery\n")
         for tier, items in tiers.items():
             if items and tier not in ("REJECTED", "FAMOUS"):
                 print(f"  {c(tier, tier_color(tier))}: {len(items)}")
@@ -407,7 +423,7 @@ def handle_alias_suggestions(results, aliases_path="aliases.txt"):
         return
 
     new_suggestions = []
-    existing = open(aliases_path, "r", encoding="utf-8").read() if os.path.exists(aliases_path) else ""
+    existing = open(aliases_path, encoding="utf-8").read() if os.path.exists(aliases_path) else ""
     for u1, u2 in suggestions:
         if u1 not in existing and u2 not in existing:
             new_suggestions.append((u1, u2))
@@ -440,7 +456,7 @@ def handle_alias_suggestions(results, aliases_path="aliases.txt"):
 def export_confirmed_as_aliases(results, aliases_path="aliases.txt"):
     confirmed = [r for r in results if r.get("tier") == "AUTO-CONFIRMED"]
     pairs = []
-    existing = open(aliases_path, "r", encoding="utf-8").read() if os.path.exists(aliases_path) else ""
+    existing = open(aliases_path, encoding="utf-8").read() if os.path.exists(aliases_path) else ""
     for r in confirmed:
         ea = r.get("entry_a", {})
         eb = r.get("entry_b", {})
@@ -472,6 +488,62 @@ def write_outputs(confirmed, review, weak, config, mode, output_dir):
         save_results_csv(weak, os.path.join(output_dir, "results_weak.csv"), mode=mode)
 
     print(f"  results written to {output_dir}/")
+
+
+def write_graph_outputs(results, unmatched, mode, output_dir, formats=("json", "graphml", "html")):
+    graph = build_graph(results, mode=mode, unmatched=unmatched)
+    if not graph["nodes"]:
+        print("  graph: no connected nodes to export")
+        return
+    os.makedirs(output_dir, exist_ok=True)
+    written = []
+    if "json" in formats:
+        written.append(graph_json(graph, os.path.join(output_dir, "graph.json")))
+    if "graphml" in formats:
+        written.append(export_graphml(graph, os.path.join(output_dir, "graph.graphml")))
+    if "html" in formats:
+        written.append(export_html(graph, os.path.join(output_dir, "graph.html")))
+    print(f"  graph: {graph['meta']['node_count']} nodes / {graph['meta']['edge_count']} links "
+          f"→ {', '.join(os.path.basename(p) for p in written)}")
+    if "html" in formats:
+        print(c("  open graph.html in any browser to explore the network (works fully offline)", "cyan"))
+
+
+def cmd_init():
+    folders = ["data/users/me", "data/known", "output"]
+    files = {
+        "feedback.json": "{}",
+        "famous.json": "[]",
+        "history.json": "[]",
+        "target.txt": "",
+    }
+    print("\n  CrossTrace setup\n")
+    for folder in folders:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+            print(f"  created {folder}/")
+        else:
+            print(f"  exists  {folder}/")
+    for filename, default in files.items():
+        if not os.path.exists(filename):
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(default)
+            print(f"  created {filename}")
+        else:
+            print(f"  exists  {filename}")
+    if not os.path.exists("aliases.txt"):
+        if os.path.exists("aliases.example.txt"):
+            with open("aliases.example.txt", encoding="utf-8") as src, \
+                 open("aliases.txt", "w", encoding="utf-8") as dst:
+                dst.write(src.read())
+            print("  created aliases.txt (from aliases.example.txt)")
+        else:
+            with open("aliases.txt", "w", encoding="utf-8") as f:
+                f.write("# Add known aliases here\n# Format: name1 = name2 = name3\n")
+            print("  created aliases.txt")
+    else:
+        print("  exists  aliases.txt")
+    print("\n  setup complete. drop your exported lists into data/users/me/ and run python crosstrace.py\n")
 
 
 def cmd_search(username):
@@ -534,7 +606,7 @@ def cmd_summary(session_name):
     if not os.path.exists(path):
         print(f"\n  no summary found for session '{session_name}'\n")
         return
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         print(f.read())
 
 
@@ -622,6 +694,14 @@ def cmd_dry_run(config, all_users, aliases, feedback, target, known_hints, mode)
 def main():
     parser = argparse.ArgumentParser(prog="crosstrace", add_help=True)
     parser.add_argument("--no-review", action="store_true", help="skip review queue entirely")
+    parser.add_argument("--init", action="store_true", help="create the folders/files CrossTrace needs and exit")
+    parser.add_argument("--target", metavar="USERNAME", help="run against this target without the interactive prompt")
+    parser.add_argument("--discovery", action="store_true", help="force discovery mode (no target prompt)")
+    parser.add_argument("--session", metavar="NAME", help="name this session without the interactive prompt")
+    parser.add_argument("--yes", "-y", action="store_true", help="non-interactive: auto-name session, no prompts, implies --no-review")
+    parser.add_argument("--graph", dest="graph_formats", metavar="FORMATS",
+                        help="export the social graph; comma list of json,graphml,html (default: all)")
+    parser.add_argument("--no-graph", action="store_true", help="skip graph export")
     parser.add_argument("--search", metavar="USERNAME", help="search for a username across all lists")
     parser.add_argument("--compare", nargs=2, metavar=("SESSION_A", "SESSION_B"), help="compare two sessions")
     parser.add_argument("--summary", metavar="SESSION", help="reprint summary for a previous session")
@@ -632,6 +712,10 @@ def main():
     parser.add_argument("--stats-only", action="store_true", help="print stats from last session without rerunning")
     parser.add_argument("--version", action="store_true", help="print version number")
     args = parser.parse_args()
+
+    if args.init:
+        cmd_init()
+        return
 
     if args.search:
         cmd_search(args.search)
@@ -676,17 +760,24 @@ def main():
     feedback = load_feedback()
     min_ulen = config.get('min_username_length', 2)
 
-    session_name = get_session_name()
+    session_name = args.session or (
+        datetime.now().strftime("session_%Y%m%d_%H%M%S") if args.yes else get_session_name()
+    )
     output_dir = os.path.join("output", session_name)
 
-    target = load_target()
-    if target is None:
-        target = get_target_interactive()
+    if args.discovery:
+        target = None
+    elif args.target:
+        target = args.target.lower()
+    else:
+        target = load_target()
+        if target is None and not args.yes:
+            target = get_target_interactive()
 
     known_hints = load_known_info(config, target=target)
 
     print("\n  loading user data...")
-    all_users = load_all_users(ignore_set=ignore)
+    all_users = load_all_users(ignore_set=ignore, min_username_length=min_ulen)
 
     if not all_users:
         print("  no user data found in data/users/")
@@ -748,7 +839,7 @@ def main():
 
     famous = load_famous()
 
-    do_review = config.get("review_mode") and not args.no_review
+    do_review = config.get("review_mode") and not args.no_review and not args.yes
 
     if do_review:
         if mode == "discovery":
@@ -788,6 +879,16 @@ def main():
 
     write_outputs(confirmed, review_list, weak, config, mode, output_dir)
     export_summary_report(results, unmatched, session_name, mode, output_dir, top_n=config.get("top_results", 5))
+
+    if not args.no_graph:
+        graph_cfg = config.get("graph", {})
+        default_formats = graph_cfg.get("formats", ["json", "graphml", "html"])
+        if args.graph_formats:
+            formats = [x.strip() for x in args.graph_formats.split(",") if x.strip()]
+        else:
+            formats = default_formats
+        write_graph_outputs(results, unmatched, mode, output_dir, formats=tuple(formats))
+
     record_session(session_name, mode, target, results, output_dir)
 
     if args.export_aliases:

@@ -11,10 +11,10 @@ CrossTrace takes raw exported follower/following lists from any social media pla
 git clone https://github.com/xpux/CrossTrace.git
 cd CrossTrace
 pip install -r requirements.txt
-python setup.py
+python crosstrace.py --init
 ```
 
-`setup.py` creates all the files and folders the tool needs on first run. After that, drop your exported lists into `data/users/me/` and run:
+`--init` creates all the files and folders the tool needs on first run. After that, drop your exported lists into `data/users/me/` and run:
 
 ```bash
 python crosstrace.py
@@ -29,8 +29,6 @@ Cross-platform matching: find the same person across TikTok, Instagram, Twitter,
 Fuzzy matching: catches variations like `johndoe`, `john_doe`, `johndoe_` and scores them by confidence
 
 Display name matching: uses both username and display name as signals, with script detection so Arabic names only match Arabic names, CJK only matches CJK, and so on
-
-Nickname detection: recognises common name shortenings like Alex/Alexander, Ben/Benjamin, Mike/Michael across display names
 
 Mutual follow bonus: if two accounts follow each other on both platforms that's scored as a stronger signal than one-way follows
 
@@ -68,6 +66,10 @@ Alias dictionary: hardcode known aliases to auto-confirm them
 
 Flexible output: CSV, JSON, or both
 
+Graph export: every run also writes the discovered network as a real graph in JSON, GraphML (for Gephi, Cytoscape, or yEd), and a single self-contained HTML viewer that runs fully offline
+
+Scriptable: run a whole session with no prompts using `--target`, `--discovery`, `--session`, and `--yes`, so it slots into scripts and automation
+
 ---
 
 ## How It Works
@@ -101,22 +103,24 @@ The number at the end groups files by platform: all files with the same number b
 Example:
 
 ```
-data/
+CrossTrace/
 ├── config.json
 ├── ignorelist.txt
 ├── aliases.txt
 ├── target.txt
-├── known/
-└── users/
-    ├── me/
-    │   ├── tiktok_followers1.txt
-    │   └── tiktok_following1.txt
-    ├── friend_a/
-    │   ├── instagram_followers2.txt
-    │   └── instagram_following2.txt
-    └── friend_b/
-        ├── tiktok_followers1.txt
-        └── instagram_followers2.txt
+├── crosstrace.py
+└── data/
+    ├── known/
+    └── users/
+        ├── me/
+        │   ├── tiktok_followers1.txt
+        │   └── tiktok_following1.txt
+        ├── friend_a/
+        │   ├── instagram_followers2.txt
+        │   └── instagram_following2.txt
+        └── friend_b/
+            ├── tiktok_followers1.txt
+            └── instagram_followers2.txt
 ```
 
 Valid filename examples:
@@ -132,7 +136,7 @@ tiktok1.txt                 ✗  (missing followers/following)
 
 ### 3. Set a target (or leave blank)
 
-In `data/target.txt`, write the username you're looking for:
+In `target.txt`, write the username you're looking for:
 
 ```
 johndoe_
@@ -249,11 +253,57 @@ Your decisions persist in `feedback.json` and improve scoring accuracy over time
 
 ---
 
-## Configuration
+## Command-line reference
 
-### `config.json`
+Running `python crosstrace.py` with no flags walks you through naming a session and entering a target interactively. The flags below let you skip the prompts or run other commands.
 
-Controls global settings:
+| Flag | What it does |
+|------|--------------|
+| `--init` | Create the folders and files CrossTrace needs, then exit |
+| `--target USERNAME` | Run against this target without the prompt |
+| `--discovery` | Force discovery mode without the prompt |
+| `--session NAME` | Name the session without the prompt |
+| `--yes`, `-y` | Non-interactive: auto-name the session, no prompts, skips review |
+| `--no-review` | Run the matching but skip the manual review queue |
+| `--graph FORMATS` | Choose graph formats, a comma list of `json,graphml,html` |
+| `--no-graph` | Skip graph export for this run |
+| `--dry-run` | Preview the review queue without saving anything |
+| `--search USERNAME` | Find a username across all loaded lists |
+| `--compare A B` | Compare two past sessions |
+| `--summary SESSION` | Reprint the summary for a past session |
+| `--history USERNAME` | Show a username's score across sessions |
+| `--export-aliases` | Export confirmed matches straight to `aliases.txt` |
+| `--stats-only` | Print the last session's stats without rerunning |
+| `--reset` | Wipe `feedback.json`, `famous.json`, and `history.json` |
+| `--version` | Print the version |
+
+A fully scripted discovery run, no prompts, HTML graph only:
+
+```bash
+python crosstrace.py --yes --discovery --session friday_sweep --graph html
+```
+
+---
+
+## Graph Output
+
+CrossTrace is a social graph analyser, so every run also reconstructs the network it found and writes it three ways under the session folder.
+
+`graph.json` is a plain nodes-and-edges structure you can load anywhere. `graph.graphml` opens directly in network tools like Gephi, Cytoscape, and yEd if you want to lay out or analyse large networks. `graph.html` is a single self-contained file you can open in any browser: it embeds the data and renders an interactive force-directed view with drag, zoom, search, and a detail panel. It loads no external scripts and makes no network requests, so it works offline and keeps everything on your machine, in keeping with the rest of the tool.
+
+In target mode the nodes are accounts and the edges are same-person matches weighted by confidence. In discovery mode the nodes are the people who appear across lists plus the seed users who follow them, so you can see who sits at the centre of the group.
+
+Pick formats per run with `--graph json,graphml,html`, turn it off with `--no-graph`, or set the default in `config.json`:
+
+```json
+"graph": {
+  "formats": ["json", "graphml", "html"]
+}
+```
+
+---
+
+
 
 ```json
 {
@@ -263,6 +313,10 @@ Controls global settings:
   "top_results": 5,
   "quick_mode": false,
   "quick_threshold": 70,
+  "min_username_length": 2,
+  "graph": {
+    "formats": ["json", "graphml", "html"]
+  },
   "known_info": {
     "enabled": true,
     "mode": "global",
@@ -280,6 +334,8 @@ Controls global settings:
 | `top_results` | `5` | How many top prevalent people to show in the summary |
 | `quick_mode` | `false` | Only show matches above `quick_threshold` in review queue |
 | `quick_threshold` | `70` | Minimum score to appear in review queue when quick mode is on |
+| `min_username_length` | `2` | Ignore parsed handles shorter than this |
+| `graph.formats` | `["json","graphml","html"]` | Graph formats written each run |
 | `known_info.enabled` | `true` | Toggle the known info system on or off |
 | `known_info.mode` | `"global"` | One of: `global`, `target`, `both` |
 | `known_info.global_path` | `"data/known"` | Path to global known info folder |
@@ -310,6 +366,8 @@ mikegaming = mike_gaming = mikeg
 john_doe = johndoe = jdoe99
 ```
 
+This file ships as `aliases.example.txt` and `--init` copies it to `aliases.txt` on first run. Because real aliases are confirmed links between people's accounts, `aliases.txt` is git-ignored and never committed.
+
 ---
 
 ## Output
@@ -322,6 +380,9 @@ Each run saves to its own folder under `output/session_name/`.
 | `results_review.csv/json` | Manual review queue and your decisions |
 | `results_weak.csv/json` | Low confidence matches (below threshold) |
 | `summary.md` | Human-readable summary report of the full run |
+| `graph.json` | The discovered network as nodes and edges |
+| `graph.graphml` | Same graph for Gephi, Cytoscape, or yEd |
+| `graph.html` | Self-contained offline viewer; open in any browser |
 
 Example output:
 
@@ -361,19 +422,26 @@ Example output:
 
 ## Resetting memory
 
-To wipe all previous review decisions open `feedback.json` and replace the contents with `{}`. To wipe the famous filter do the same for `famous.json`.
+To wipe all learned state, run `python crosstrace.py --reset`. This clears `feedback.json` (your confirm/reject decisions), `famous.json` (the filtered public figures), and `history.json` (past sessions) in one step.
 
 ---
 
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/crosstrace.git
-cd crosstrace
+git clone https://github.com/xpux/CrossTrace.git
+cd CrossTrace
 pip install -r requirements.txt
 ```
 
-Requirements: Python 3.8+, `rapidfuzz`, `pandas`
+You can also install it as a package, which adds a `crosstrace` command on your path:
+
+```bash
+pip install .
+crosstrace --version
+```
+
+Requirements: Python 3.8+ and `rapidfuzz`.
 
 Works on Windows, Linux, and Mac.
 

@@ -1,14 +1,13 @@
 import os
 import re
 
-
 HARDCODED_IGNORE = {"following", "followers", "follow back", "follow"}
 
 
 def load_ignorelist(path="ignorelist.txt"):
     ignore = set(HARDCODED_IGNORE)
     if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip().lower()
                 if line:
@@ -20,7 +19,7 @@ def load_aliases(path="aliases.txt"):
     alias_map = {}
     if not os.path.exists(path):
         return alias_map
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for group_id, line in enumerate(f):
             line = line.strip()
             if not line or line.startswith("#"):
@@ -52,11 +51,11 @@ def is_display_name(line):
     return not bool(re.match(r'^[\w.\-]+$', line))
 
 
-def parse_file(filepath, ignore_set):
-    with open(filepath, "r", encoding="utf-8") as f:
+def parse_file(filepath, ignore_set, min_username_length=2):
+    with open(filepath, encoding="utf-8") as f:
         raw_lines = [line.strip() for line in f.readlines()]
 
-    filtered = [l for l in raw_lines if l and l.lower() not in ignore_set]
+    filtered = [line for line in raw_lines if line and line.lower() not in ignore_set]
 
     entries = []
     i = 0
@@ -66,7 +65,7 @@ def parse_file(filepath, ignore_set):
         username = None
         display_name = None
 
-        if is_username(line):
+        if is_username(line, min_username_length):
             username = line.lower()
             if next_line and is_display_name(next_line) and next_line.lower() not in ignore_set:
                 display_name = next_line
@@ -75,7 +74,7 @@ def parse_file(filepath, ignore_set):
                 i += 1
         elif is_display_name(line):
             display_name = line
-            if next_line and is_username(next_line) and next_line.lower() not in ignore_set:
+            if next_line and is_username(next_line, min_username_length) and next_line.lower() not in ignore_set:
                 username = next_line.lower()
                 i += 2
             else:
@@ -98,7 +97,7 @@ def get_platform_from_filename(filename):
     return "unknown", "unknown", 0
 
 
-def load_all_users(users_dir="data/users", ignore_set=None):
+def load_all_users(users_dir="data/users", ignore_set=None, min_username_length=2):
     if ignore_set is None:
         ignore_set = load_ignorelist()
 
@@ -130,7 +129,7 @@ def load_all_users(users_dir="data/users", ignore_set=None):
                     "following": []
                 }
 
-            entries = parse_file(filepath, ignore_set)
+            entries = parse_file(filepath, ignore_set, min_username_length)
 
             if list_type == "followers":
                 all_users[user_folder][bucket_key]["followers"] = entries
@@ -143,7 +142,7 @@ def load_all_users(users_dir="data/users", ignore_set=None):
 def load_target(path="target.txt"):
     if not os.path.exists(path):
         return None
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#"):
