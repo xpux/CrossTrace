@@ -1,2 +1,0 @@
-# Add known aliases here
-# Format: name1 = name2 = name3

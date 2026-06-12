@@ -18,6 +18,7 @@ from matcher import (
     match_across_platforms,
     suggest_aliases,
 )
+from mutuals import find_mutual_buckets, get_mutuals_menu_choice, run_mutuals
 from reviewer import load_famous, run_discovery_review, run_review, run_unmatched_review
 
 VERSION = "1.1.0"
@@ -703,6 +704,10 @@ def main():
                         help="export the social graph; comma list of json,graphml,html (default: all)")
     parser.add_argument("--no-graph", action="store_true", help="skip graph export")
     parser.add_argument("--search", metavar="USERNAME", help="search for a username across all lists")
+    parser.add_argument("--mutuals", action="store_true",
+                        help="find people who follow each other (mutuals) per platform and exit")
+    parser.add_argument("--mutuals-formats", metavar="FORMATS", default="csv,json",
+                        help="output formats for mutuals, comma list of csv,json (default: csv,json)")
     parser.add_argument("--compare", nargs=2, metavar=("SESSION_A", "SESSION_B"), help="compare two sessions")
     parser.add_argument("--summary", metavar="SESSION", help="reprint summary for a previous session")
     parser.add_argument("--history", metavar="USERNAME", help="show score history for a username across sessions")
@@ -719,6 +724,28 @@ def main():
 
     if args.search:
         cmd_search(args.search)
+        return
+
+    if args.mutuals:
+        ignore = load_ignorelist()
+        config = load_config()
+        all_users = load_all_users(ignore_set=ignore, min_username_length=config.get("min_username_length", 2))
+        formats = tuple(x.strip() for x in args.mutuals_formats.split(",") if x.strip())
+
+        buckets = find_mutual_buckets(all_users)
+        if not buckets:
+            print("\n  no platform has both a followers and a following list loaded.")
+            print("  mutuals needs e.g. tiktok_followers1.txt AND tiktok_following1.txt for the same person.\n")
+            return
+
+        if args.yes:
+            only_user, only_platform = None, None
+        else:
+            only_user, only_platform = get_mutuals_menu_choice(buckets)
+
+        output_dir = os.path.join("output", args.session or "mutuals")
+        run_mutuals(all_users, output_dir, formats=formats,
+                    only_user=only_user, only_platform=only_platform)
         return
 
     if args.compare:

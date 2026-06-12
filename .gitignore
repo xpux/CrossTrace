@@ -3,6 +3,7 @@ data/users/
 data/known/
 target.txt
 aliases.txt          # confirmed identity links live here; ship aliases.example.txt instead
+aliases.example.txt  # template for aliases.txt
 config.local.json    # local config overrides; config.json stays as the tracked template
 
 # ── Output sessions ───────────────────────────────────────────────────

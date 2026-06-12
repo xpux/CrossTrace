@@ -52,39 +52,56 @@ def is_display_name(line):
 
 
 def parse_file(filepath, ignore_set, min_username_length=2):
+    """Parse a follower/following export.
+
+    These exports list one account per "block": an optional display name
+    line, followed by the @username line, with blank line(s) separating each
+    account from the next. A block can also be a single line on its own if
+    the account has no display name (TikTok shows nothing on that line).
+
+    Parsing by these blank-line-delimited blocks (rather than guessing
+    line-by-line) avoids desync: a single empty-nickname account no longer
+    shifts every subsequent pairing by one line.
+    """
     with open(filepath, encoding="utf-8") as f:
         raw_lines = [line.strip() for line in f.readlines()]
 
-    filtered = [line for line in raw_lines if line and line.lower() not in ignore_set]
+    blocks = []
+    current = []
+    for line in raw_lines:
+        if not line:
+            if current:
+                blocks.append(current)
+                current = []
+            continue
+        if line.lower() in ignore_set:
+            continue
+        current.append(line)
+    if current:
+        blocks.append(current)
 
     entries = []
-    i = 0
-    while i < len(filtered):
-        line = filtered[i]
-        next_line = filtered[i + 1] if i + 1 < len(filtered) else None
-        username = None
-        display_name = None
-
-        if is_username(line, min_username_length):
-            username = line.lower()
-            if next_line and is_display_name(next_line) and next_line.lower() not in ignore_set:
-                display_name = next_line
-                i += 2
-            else:
-                i += 1
-        elif is_display_name(line):
-            display_name = line
-            if next_line and is_username(next_line, min_username_length) and next_line.lower() not in ignore_set:
-                username = next_line.lower()
-                i += 2
-            else:
-                i += 1
-        else:
-            i += 1
+    for block in blocks:
+        if len(block) == 1:
+            line = block[0]
+            if is_username(line, min_username_length):
+                entries.append({"username": line.lower(), "display_name": None})
+            elif is_display_name(line):
+                entries.append({"username": None, "display_name": line})
             continue
 
-        if username or display_name:
-            entries.append({"username": username, "display_name": display_name})
+        # 2+ lines: position is authoritative for this export format.
+        # The last line is the @username, everything before it is the
+        # display name (joined back together in case of stray extra lines).
+        display_name = " ".join(block[:-1])
+        candidate_username = block[-1]
+
+        if is_username(candidate_username, min_username_length):
+            entries.append({"username": candidate_username.lower(), "display_name": display_name})
+        else:
+            # Last line doesn't look like a username (unexpected shape) —
+            # keep the whole block as a display name rather than dropping it.
+            entries.append({"username": None, "display_name": " ".join(block)})
 
     return entries
 
