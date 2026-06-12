@@ -30,7 +30,13 @@ Fuzzy matching: catches variations like `johndoe`, `john_doe`, `johndoe_` and sc
 
 Display name matching: uses both username and display name as signals, with script detection so Arabic names only match Arabic names, CJK only matches CJK, and so on
 
-Mutual follow bonus: if two accounts follow each other on both platforms that's scored as a stronger signal than one-way follows
+Mutual follow detection: identifies accounts that appear in both followers and following lists (reciprocal relationships), giving stronger insight into two-way connections within each platform bucket
+
+Mutual export system: outputs mutual connections per bucket in CSV and JSON formats for external analysis and tracking
+
+Interactive mutual selection: lets you choose a specific user/platform bucket or run mutual detection across all loaded datasets
+
+Mutual scoring integration: mutual connections are treated as higher-confidence relationships compared to one-way follows, improving relationship weighting in analysis
 
 Multi-user / friend group mode: add multiple people's lists to map a shared social network
 
