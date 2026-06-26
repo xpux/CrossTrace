@@ -17,9 +17,13 @@ passed in.
 
 import html
 import json
-from xml.sax.saxutils import escape as xml_escape
+from xml.sax.saxutils import escape as _xml_escape
 
 VISIBLE_TIERS = ("AUTO-CONFIRMED", "QUICK REVIEW", "MANUAL REVIEW", "UNMATCHED_KEPT")
+
+
+def _attr_escape(value):
+    return _xml_escape(str(value), {'"': "&quot;", "'": "&apos;", "\t": "&#9;", "\n": "&#10;", "\r": "&#13;"})
 
 
 def _node_id(username, display_name, platform):
@@ -34,13 +38,6 @@ def _label(username, display_name):
 
 
 def build_graph(results, mode="target", include_tiers=VISIBLE_TIERS, unmatched=None):
-    """Build a {nodes, edges, meta} dict from a results list.
-
-    Target mode  : nodes are accounts, edges are "same person" matches weighted
-                   by confidence.
-    Discovery    : nodes are accounts plus the seed users they were seen by,
-                   edges connect each account to the seed users following it.
-    """
     nodes = {}
     edges = []
     include = set(include_tiers)
@@ -131,6 +128,7 @@ def export_json(graph, path):
 
 
 def export_graphml(graph, path):
+    # fix issue 13: use _attr_escape for all XML attribute values to prevent quote injection
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<graphml xmlns="http://graphml.graphdrawing.org/xmlns">',
@@ -144,17 +142,17 @@ def export_graphml(graph, path):
         '  <graph edgedefault="undirected">',
     ]
     for n in graph["nodes"]:
-        lines.append(f'    <node id="{xml_escape(n["id"])}">')
-        lines.append(f'      <data key="label">{xml_escape(n["label"])}</data>')
-        lines.append(f'      <data key="platform">{xml_escape(n["platform"])}</data>')
-        lines.append(f'      <data key="kind">{xml_escape(n["kind"])}</data>')
-        lines.append(f'      <data key="tier">{xml_escape(n["tier"])}</data>')
+        lines.append(f'    <node id="{_attr_escape(n["id"])}">')
+        lines.append(f'      <data key="label">{_attr_escape(n["label"])}</data>')
+        lines.append(f'      <data key="platform">{_attr_escape(n["platform"])}</data>')
+        lines.append(f'      <data key="kind">{_attr_escape(n["kind"])}</data>')
+        lines.append(f'      <data key="tier">{_attr_escape(n["tier"])}</data>')
         lines.append(f'      <data key="score">{int(n["score"])}</data>')
         lines.append('    </node>')
     for i, e in enumerate(graph["edges"]):
-        lines.append(f'    <edge id="e{i}" source="{xml_escape(e["source"])}" target="{xml_escape(e["target"])}">')
+        lines.append(f'    <edge id="e{i}" source="{_attr_escape(e["source"])}" target="{_attr_escape(e["target"])}">')
         lines.append(f'      <data key="weight">{int(e["weight"])}</data>')
-        lines.append(f'      <data key="reltype">{xml_escape(e["kind"])}</data>')
+        lines.append(f'      <data key="reltype">{_attr_escape(e["kind"])}</data>')
         lines.append('    </edge>')
     lines.append('  </graph>')
     lines.append('</graphml>')
@@ -164,10 +162,15 @@ def export_graphml(graph, path):
 
 
 def export_html(graph, path, title="CrossTrace graph"):
-    """Write a single self-contained HTML file. Fully offline: the graph data
-    is embedded as JSON and rendered by a small vanilla-JS canvas layout with
-    no external dependencies."""
-    payload = json.dumps(graph)
+    # fix issue 12: escape JSON payload for HTML script context to prevent XSS
+    payload = (
+        json.dumps(graph)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
     doc = _HTML_TEMPLATE.replace("{{TITLE}}", html.escape(title)).replace("{{DATA}}", payload)
     with open(path, "w", encoding="utf-8") as f:
         f.write(doc)
